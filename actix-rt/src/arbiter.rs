@@ -18,14 +18,12 @@ use crate::system::System;
 
 use copyless::BoxHelper;
 
-use smallvec::SmallVec;
 pub use tokio::task::JoinHandle;
 
 thread_local!(
     static ADDR: RefCell<Option<Arbiter>> = RefCell::new(None);
     static RUNNING: Cell<bool> = Cell::new(false);
     static Q: RefCell<Vec<Pin<Box<dyn Future<Output = ()>>>>> = RefCell::new(Vec::new());
-    static PENDING: RefCell<SmallVec<[JoinHandle<()>; 8]>> = RefCell::new(SmallVec::new());
     static STORAGE: RefCell<HashMap<TypeId, Box<dyn Any>>> = RefCell::new(HashMap::new());
 );
 
@@ -181,16 +179,7 @@ impl Arbiter {
     {
         RUNNING.with(move |cell| {
             if cell.get() {
-                // Spawn the future on running executor
-                let len = PENDING.with(move |cell| {
-                    let mut p = cell.borrow_mut();
-                    p.push(tokio::task::spawn_local(future));
-                    p.len()
-                });
-                if len > 7 {
-                    // Before reaching the inline size
-                    tokio::task::spawn_local(CleanupPending);
-                }
+                tokio::task::spawn_local(future);
             } else {
                 // Box the future and push it to the queue, this results in double boxing
                 // because the executor boxes the future again, but works for now
@@ -317,34 +306,9 @@ impl Arbiter {
     /// Returns a future that will be completed once all currently spawned futures
     /// have completed.
     pub fn local_join() -> impl Future<Output = ()> {
-        PENDING.with(move |cell| {
-            let current = cell.replace(SmallVec::new());
-            future::join_all(current).map(|_| ())
-        })
-    }
-}
-
-/// Future used for cleaning-up already finished `JoinHandle`s
-/// from the `PENDING` list so the vector doesn't grow indefinitely
-struct CleanupPending;
-
-impl Future for CleanupPending {
-    type Output = ();
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        PENDING.with(move |cell| {
-            let mut pending = cell.borrow_mut();
-            let mut i = 0;
-            while i != pending.len() {
-                if let Poll::Ready(_) = Pin::new(&mut pending[i]).poll(cx) {
-                    pending.remove(i);
-                } else {
-                    i += 1;
-                }
-            }
-        });
-
-        Poll::Ready(())
+        async {
+            todo!("No, This Isn't How You're Supposed To Play The Game");
+        }
     }
 }
 
@@ -381,15 +345,7 @@ impl Future for ArbiterController {
                         return Poll::Ready(());
                     }
                     ArbiterCommand::Execute(fut) => {
-                        let len = PENDING.with(move |cell| {
-                            let mut p = cell.borrow_mut();
-                            p.push(tokio::task::spawn_local(fut));
-                            p.len()
-                        });
-                        if len > 7 {
-                            // Before reaching the inline size
-                            tokio::task::spawn_local(CleanupPending);
-                        }
+                        tokio::task::spawn_local(fut);
                     }
                     ArbiterCommand::ExecuteFn(f) => {
                         f.call_box();
