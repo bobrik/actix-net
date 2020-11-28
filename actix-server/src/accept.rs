@@ -302,7 +302,7 @@ impl Accept {
                                 error!("Can not resume socket accept process: {}", err);
                             } else {
                                 info!(
-                                    "Accepting connections on {} has been resumed",
+                                    "Accepting connections on {} has been resumed!",
                                     info.addr
                                 );
                             }
@@ -311,6 +311,7 @@ impl Accept {
                     Command::Stop => {
                         for (_, info) in self.sockets.iter() {
                             let _ = self.poll.deregister(&info.sock);
+                            info!("Accepting connections on {} has been stoppped", info.addr);
                         }
                         return false;
                     }
@@ -324,6 +325,7 @@ impl Accept {
                     sync_mpsc::TryRecvError::Disconnected => {
                         for (_, info) in self.sockets.iter() {
                             let _ = self.poll.deregister(&info.sock);
+                            info!("Accepting connections on {} has been stoppped2", info.addr);
                         }
                         return false;
                     }
@@ -381,6 +383,7 @@ impl Accept {
             self.backpressure = true;
             for (_, info) in self.sockets.iter() {
                 let _ = self.poll.deregister(&info.sock);
+                info!("Accepting connections on {} has been paused", info.addr);
             }
         }
     }
@@ -452,9 +455,9 @@ impl Accept {
                     Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => return,
                     Err(ref e) if connection_error(e) => continue,
                     Err(e) => {
-                        error!("Error accepting connection: {}", e);
+                        eprintln!("Error accepting connection: {}", e);
                         if let Err(err) = self.poll.deregister(&info.sock) {
-                            error!("Can not deregister server socket {}", err);
+                            eprintln!("Can not deregister server socket {}", err);
                         }
 
                         // sleep after error
