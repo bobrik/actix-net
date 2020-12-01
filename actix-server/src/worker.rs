@@ -79,9 +79,10 @@ impl WorkerClient {
     }
 
     pub fn send(&self, msg: Conn) -> Result<(), Conn> {
-        self.tx1
-            .unbounded_send(WorkerCommand(msg))
-            .map_err(|msg| msg.into_inner().0)
+        self.tx1.unbounded_send(WorkerCommand(msg)).map_err(|msg| {
+            error!("failed to send message to worker: {}", msg);
+            msg.into_inner().0
+        })
     }
 
     pub fn available(&self) -> bool {
@@ -375,6 +376,10 @@ impl Future for Worker {
                                 conns.push(conn);
                             }
                         }
+                        info!(
+                            "worker {:?} is not available and is not ready",
+                            std::thread::current().id()
+                        );
                         Poll::Pending
                     }
                     Err((token, idx)) => {

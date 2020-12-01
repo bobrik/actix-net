@@ -183,6 +183,8 @@ impl Accept {
             Err(err) => panic!("Can not create mio::Poll: {}", err),
         };
 
+        info!("created accept loop with {} workers", workers.len());
+
         // Start accept
         let mut sockets = Slab::new();
         for (hnd_token, lst) in socks.into_iter() {
@@ -317,6 +319,7 @@ impl Accept {
                     Command::Worker(worker) => {
                         self.backpressure(false);
                         self.workers.push(worker);
+                        info!("added worker, len = {}", self.workers.len());
                     }
                 },
                 Err(err) => match err {
@@ -392,6 +395,7 @@ impl Accept {
                 match self.workers[self.next].send(msg) {
                     Ok(_) => (),
                     Err(tmp) => {
+                        error!("worker {} faulted", self.next);
                         self.srv.worker_faulted(self.workers[self.next].idx);
                         msg = tmp;
                         self.workers.swap_remove(self.next);
@@ -418,6 +422,7 @@ impl Accept {
                             return;
                         }
                         Err(tmp) => {
+                            error!("worker {} faulted", self.next);
                             self.srv.worker_faulted(self.workers[self.next].idx);
                             msg = tmp;
                             self.workers.swap_remove(self.next);
@@ -431,6 +436,8 @@ impl Accept {
                             continue;
                         }
                     }
+                } else {
+                    error!("worker {} is not available", self.next);
                 }
                 self.next = (self.next + 1) % self.workers.len();
             }
